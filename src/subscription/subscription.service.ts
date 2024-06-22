@@ -2,20 +2,45 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AdminConfig } from 'src/schemas/adminConfig.schema';
-import { AdminConfigResponseDto, UserBalanceDto } from './subscription.dto';
+import {
+  AdminConfigResponseDto,
+  SubscriptionPlanArrayDto,
+  SubscriptionPlanDto,
+  SubscriptionResponseDto,
+  SubscriptionStatus,
+  UserBalanceDto,
+} from './subscription.dto';
 import { User } from 'src/schemas/user.schema';
 import { Wallet } from 'src/schemas/wallet.schema';
 import { HttpService } from '@nestjs/axios';
 import 'dotenv/config';
-import { Address, fromNano } from '@ton/ton';
+import { Address } from '@ton/ton';
 import { TransactionV3 } from 'src/subscription/types';
+import { SubscriptionPlan } from 'src/schemas/subscriptionPlan.schema';
+import { Subscription } from 'src/schemas/subscription.schema';
+import { TelegramBotService } from 'src/telegramBot/bot.service';
 
 @Injectable()
 export class SubscriptionService {
   constructor(
+    //
     @InjectModel(AdminConfig.name) private adminConfigModel: Model<AdminConfig>,
+    //
     @InjectModel(User.name) private userModel: Model<User>,
+    //
+    @InjectModel(SubscriptionPlan.name)
+    private subscriptionPlanModel: Model<SubscriptionPlan>,
+    //
+    @InjectModel(Subscription.name)
+    private subscriptionModel: Model<Subscription>,
+
+    //
+
     private readonly httpService: HttpService,
+
+    //
+
+    private readonly telegramBotService: TelegramBotService,
   ) {}
 
   //
@@ -312,14 +337,6 @@ export class SubscriptionService {
           },
         })
         .exec();
-      // const newBalance = Types.Decimal128.fromString(
-      //   (
-      //     amountNanoton + BigInt(user.nanotonCoinsBalance.toString())
-      //   ).toString(),
-      // );
-
-      // user.nanotonCoinsBalance = newBalance;
-      // user.save();
     } catch (error) {
       throw new Error(error);
     }
@@ -369,7 +386,7 @@ export class SubscriptionService {
   //---------------------------- get user payments from transactions -------------------------------//
   //
 
-  async treverseTransactionsAndUpdateBalance(userDbId: string) {
+  async traverseTransactionsAndUpdateBalance(userDbId: string) {
     try {
       const userDbObjectId = new Types.ObjectId(userDbId);
 
@@ -397,10 +414,6 @@ export class SubscriptionService {
         throw new Error('No admin address found');
       }
 
-      // initialize variables for transactions treversing
-      //const NUMBER_OF_TRANSACTIONS_PER_REQUEST = 5;
-      //let offset = 0;
-
       // get transactions api url
       const baseUrl = 'https://testnet.toncenter.com/api/v3/transactions';
 
@@ -408,7 +421,7 @@ export class SubscriptionService {
 
       let isTransactionsLeft = true;
 
-      // treverse transactions and calculate how many nanoton coins user sent to admin wallet
+      // traverse transactions and calculate how many nanoton coins user sent to admin wallet
       while (isTransactionsLeft) {
         isTransactionsLeft = false;
 
@@ -431,8 +444,6 @@ export class SubscriptionService {
           'start_utime',
           Math.floor(lastTransactionDate.getTime() / 1000).toString(),
         );
-        //params.append('limit', NUMBER_OF_TRANSACTIONS_PER_REQUEST.toString());
-        //params.append('offset', offset.toString());
         params.append('sort', 'asc');
 
         const url = `${baseUrl}?${params.toString()}`;
@@ -471,7 +482,6 @@ export class SubscriptionService {
 
           if (transactions.length > 0) {
             isTransactionsLeft = true;
-            //offset += NUMBER_OF_TRANSACTIONS_PER_REQUEST;
 
             console.log(
               '-----------------------------------------------------------------------',
@@ -504,14 +514,228 @@ export class SubscriptionService {
         throw new Error('No nanotons balance found');
       }
 
-      const userTonBalance = fromNano(
-        userAfter?.nanotonCoinsBalance.toString(),
-      );
+      const userNanotonsBalance = userAfter?.nanotonCoinsBalance;
 
       // return user balance
-      return new UserBalanceDto(userTonBalance);
+      return new UserBalanceDto(userNanotonsBalance.toString());
     } catch (error) {
       throw error;
     }
   }
+
+  //
+  //------------------------------------- get subscription plans -------------------------------------//
+  //
+
+  async getSubscriptionPlans(): Promise<SubscriptionPlanArrayDto> {
+    // get subscription plans from db
+    const subscriptionPlans = await this.subscriptionPlanModel.find().exec();
+    //console.log(subscriptionPlans);
+
+    const subscriptionPlanDtos: SubscriptionPlanDto[] = subscriptionPlans.map(
+      (subscriptionPlan) =>
+        new SubscriptionPlanDto(
+          subscriptionPlan.title,
+          subscriptionPlan.description,
+          subscriptionPlan.priceInNanotons.toString(),
+          subscriptionPlan.durationInSeconds,
+        ),
+    );
+    return new SubscriptionPlanArrayDto(subscriptionPlanDtos);
+  }
+
+  //
+  //------------------------------------- get subscription status -------------------------------------//
+  //
+
+  async getSubscriptionStatus(
+    userId: string,
+  ): Promise<SubscriptionResponseDto> {
+    const latestActiveSubscription =
+      await this.getLatestActiveSubscription(userId);
+    if (latestActiveSubscription !== null) {
+      console.log('--------------------------');
+      console.log(latestActiveSubscription);
+      return new SubscriptionResponseDto(
+        SubscriptionStatus.ACTIVE,
+        latestActiveSubscription.endDate,
+      );
+    }
+    console.log('--------------------------');
+    console.log(latestActiveSubscription);
+    return new SubscriptionResponseDto(SubscriptionStatus.INACTIVE);
+  }
+
+  //
+  //------------------------------------- get ChatWithBotId -------------------------------------//
+  //
+
+  async getChatWithBotId(userDbId: string) {
+    const userDbObjectId = new Types.ObjectId(userDbId);
+    const user = await this.userModel.findById(userDbObjectId).exec();
+    if (!user) {
+      throw new Error('No user found');
+    }
+    return user.chatWithBotId;
+  }
+
+  //
+  //------------------------------------- make subscription -------------------------------------//
+  //
+
+  async makeSubscription(userId: string) {
+    // find latest subscription
+    const latestActiveSubscription =
+      await this.getLatestActiveSubscription(userId);
+
+    // if subscription is already active response that subscription is already active
+    if (latestActiveSubscription !== null) {
+      // return success response
+      return new SubscriptionResponseDto(
+        SubscriptionStatus.ACTIVE,
+        latestActiveSubscription.endDate,
+      );
+    }
+
+    // if subscription is not active - make subscription
+    // Immediate, 5 seconds, 5 seconds, 10 seconds, and 30 seconds
+    const intervals = [0, 5000, 5000, 10000, 30000];
+
+    for (let i = 0; i < intervals.length; i++) {
+      if (i > 0) {
+        // Wait for the interval
+        await new Promise((resolve) => setTimeout(resolve, intervals[i]));
+      }
+      const userBalanceDto =
+        await this.traverseTransactionsAndUpdateBalance(userId);
+
+      const userBalanceInNanotonString = userBalanceDto.nanotonCoinsBalance;
+      // convert string to number
+      const userBalanceInNanoton = BigInt(userBalanceInNanotonString);
+
+      // geting first subscriptoin plan
+      // change to request argument
+      const subscriptionPlanArrayDto = await this.getSubscriptionPlans();
+      const subscriptionPlan = subscriptionPlanArrayDto.subscriptionPlans[0];
+
+      const subscriptionPriceInNanotonString =
+        subscriptionPlan.priceInNanotonCoins;
+      // convert string to number
+      const subscriptionPriceInNanoton = BigInt(
+        subscriptionPriceInNanotonString,
+      );
+
+      if (userBalanceInNanoton >= subscriptionPriceInNanoton) {
+        // update subscription status in db
+        const subscriptionEndDate = await this.updateSubscriptionStatus(
+          userId,
+          subscriptionPlan.durationInSeconds,
+        );
+
+        // update balance in db
+        await this.updateUserBalance(userId, -subscriptionPriceInNanoton);
+
+        // get chat with bot id
+        const chatWithBotId = await this.getChatWithBotId(userId);
+
+        // schadule notification for subscription about to expire date
+        this.telegramBotService.scheduleMessageSubscriptionIsAboutToExpire(
+          subscriptionEndDate,
+          chatWithBotId,
+        );
+
+        // schadule notification for subscription end date
+        this.telegramBotService.scheduleMessageSubscriptionHasExpired(
+          subscriptionEndDate,
+          chatWithBotId,
+        );
+
+        // return success response
+        return new SubscriptionResponseDto(
+          SubscriptionStatus.ACTIVE,
+          subscriptionEndDate,
+        );
+      }
+    }
+    // return failure response
+    return new SubscriptionResponseDto(SubscriptionStatus.INACTIVE);
+  }
+
+  //
+  // ----------------------------- get latest active subscription --------------------------------//
+  //
+
+  async getLatestActiveSubscription(
+    userId: string,
+  ): Promise<Subscription | null> {
+    const userObjectId = new Types.ObjectId(userId);
+    const subscriptions: Subscription[] = await this.subscriptionModel
+      .aggregate([
+        {
+          $match: {
+            userId: userObjectId,
+            endDate: { $gt: new Date() },
+          },
+        },
+        {
+          $sort: { endDate: -1 },
+        },
+        {
+          $limit: 1,
+        },
+      ])
+      .exec();
+
+    return subscriptions.length > 0 ? subscriptions[0] : null;
+  }
+
+  //
+  // ----------------------------- update subscription status in db --------------------------------//
+  //
+
+  private async updateSubscriptionStatus(
+    userId: string,
+    subscriptionDurationInSeconds: number,
+  ): Promise<Date> {
+    const userObjectId = new Types.ObjectId(userId);
+    const TRANSACTION_DATE = new Date();
+    const SUBSCRIPTION_END_DATE = new Date(
+      TRANSACTION_DATE.getTime() + subscriptionDurationInSeconds * 1000,
+    );
+
+    // find latest subscription
+    const latestActiveSubscription =
+      await this.getLatestActiveSubscription(userId);
+
+    // is user already subscribed?
+    if (latestActiveSubscription !== null) {
+      // add new subscription document
+      // with start date equal to latest subscription end date
+      // and end date equal to transaction date
+
+      const newSubscriptionData: Subscription = {
+        userId: userObjectId,
+        startDate: latestActiveSubscription.endDate,
+        endDate: SUBSCRIPTION_END_DATE,
+      };
+      const newSubscription = new this.subscriptionModel(newSubscriptionData);
+      await newSubscription.save();
+    } else {
+      // create new subscription
+
+      const newSubscriptionData: Subscription = {
+        userId: userObjectId,
+        startDate: TRANSACTION_DATE,
+        endDate: SUBSCRIPTION_END_DATE,
+      };
+      const subscription = new this.subscriptionModel(newSubscriptionData);
+      await subscription.save();
+    }
+
+    return SUBSCRIPTION_END_DATE;
+  }
+
+  //
+  //
+  //
 }

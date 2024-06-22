@@ -9,6 +9,7 @@ import {
 import { AuthGuard } from 'src/auth/auth.guard';
 import { SubscriptionService } from './subscription.service';
 import { AdminGuard } from './admin.guard';
+import { SubscriberGuard } from './subscriber.guard';
 
 @Controller('subscription')
 @UseGuards(AuthGuard)
@@ -39,16 +40,43 @@ export class SubscriptionController {
     }
   }
 
+  @Get('get-plans')
+  async getSubscriptionPlans() {
+    try {
+      return this.subscriptionService.getSubscriptionPlans();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  @Get('get-subscription-status')
+  async getSubscriptionStatus(@Headers('user_db_id') userDbId: string) {
+    try {
+      return this.subscriptionService.getSubscriptionStatus(userDbId);
+    } catch (error) {
+      throw error;
+    }
+  }
+
   @Post('user-wallet-confirmation')
   async userWalletConfirmation(
     @Body('wallet') wallet: string,
     @Headers('user_db_id') userDbId: string,
   ) {
     try {
-      // add user wallet and user's last transaction hash to db
+      // add user wallet to db, assign last transaction date to now
       this.subscriptionService.userWalletConfirmation(userDbId, wallet);
       // send back admin wallet
       return this.subscriptionService.getActiveAdminConfig();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  @Get('make-subscription')
+  async makeSubscription(@Headers('user_db_id') userDbId: string) {
+    try {
+      return this.subscriptionService.makeSubscription(userDbId);
     } catch (error) {
       throw error;
     }
@@ -59,9 +87,19 @@ export class SubscriptionController {
     @Headers('user_db_id') userDbId: string,
   ) {
     try {
-      return this.subscriptionService.treverseTransactionsAndUpdateBalance(
+      return this.subscriptionService.traverseTransactionsAndUpdateBalance(
         userDbId,
       );
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  @UseGuards(SubscriberGuard)
+  @Get('subscriber-protected-route')
+  async subscriberProtectedRoute(@Headers('user_db_id') userDbId: string) {
+    try {
+      return { message: 'You are a subscriber', userDbId: userDbId };
     } catch (error) {
       throw error;
     }

@@ -5,6 +5,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { TelegramBotModule } from './telegramBot/bot.module';
 import { ConfigModule } from '@nestjs/config';
 import { TonConnectModule } from './tonConnect/tonConnect.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 function validateMongoUrl(mongoUrl: string): void {
   try {
@@ -28,6 +29,7 @@ function validateMongoUrl(mongoUrl: string): void {
     ),
     TelegramBotModule,
     TonConnectModule,
+    ScheduleModule.forRoot(),
   ],
   // controllers: [AppController],
   // providers: [AppService],

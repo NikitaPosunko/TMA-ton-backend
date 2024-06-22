@@ -7,16 +7,11 @@ import {
 import * as crypto from 'crypto';
 import 'dotenv/config';
 import { JwtService } from '@nestjs/jwt';
-import {
-  AuthResponseDto,
-  CreateGoogleUserDto,
-  CreateTelegramUserDto,
-  AdminCheckResponseDto,
-} from './auth.dto';
+import { AuthResponseDto, AdminCheckResponseDto } from './auth.dto';
 import { WebAppInitData } from './types';
 import { User } from 'src/schemas/user.schema';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import * as admin from 'firebase-admin';
 
 @Injectable()
@@ -27,7 +22,58 @@ export class AuthService {
     @Inject('FIREBASE_ADMIN') private readonly firebaseAdmin: admin.app.App,
   ) {}
 
+  //
+  // ---------------------------- Update ChatWithBotId for user or create new user -------------------------------//
+  //
+
+  async updateChatWithBotIdForUserOrCreateUser(
+    telegramUserId: number,
+    chatWithBotId: number,
+  ) {
+    const user = await this.userModel.findOne({
+      telegramUserId: telegramUserId,
+    });
+
+    if (!user) {
+      // if user is not exists create it
+      await this.addUserWithTelegramUserIdAndBotChatIdToDb(
+        telegramUserId,
+        chatWithBotId,
+      );
+    } else {
+      // if user is exists update chatWithBotId
+      await this.userModel.updateOne(
+        { telegramUserId: telegramUserId },
+        { chatWithBotId: chatWithBotId },
+      );
+    }
+  }
+
+  //
+  //------------------------- add new user with telegramUserId and botChatId to db ------------------------//
+  //
+
+  async addUserWithTelegramUserIdAndBotChatIdToDb(
+    telegramUserId: number,
+    chatWithBotId: number,
+  ) {
+    const newUserData: User = {
+      telegramUserId: telegramUserId,
+      chatWithBotId: chatWithBotId,
+      isAdmin: false,
+      nanotonCoinsBalance: new Types.Decimal128('0'),
+      wallets: [],
+    };
+
+    await this.userModel.insertMany(newUserData);
+  }
+
+  //
+  //---------------------------------- Validate Telegram Auth data -----------------------------------//
+  //
+
   async validateTelegramAuth(rowInitData: string): Promise<AuthResponseDto> {
+    console.log(rowInitData);
     // init data parsing
     const urlParams = new URLSearchParams(rowInitData);
     const hash = urlParams.get('hash');
@@ -98,6 +144,10 @@ export class AuthService {
     throw new UnauthorizedException('Invalid hash');
   }
 
+  //
+  //---------------------------------- Sign Up with Telegram -----------------------------------//
+  //
+
   async signUpWithTelegram(rowInitData: string): Promise<AuthResponseDto> {
     const telegramAuthResponseDto =
       await this.validateTelegramAuth(rowInitData);
@@ -107,26 +157,44 @@ export class AuthService {
     }
 
     const telegramUserId = telegramAuthResponseDto.authData.user.id;
+    const telegramUserFirstName =
+      telegramAuthResponseDto.authData.user.first_name;
 
     // Check if the user exists in the database
     const existingUser = await this.userModel
-      .findOne({ telegramUserId: telegramUserId })
+      .findOne({
+        telegramUserId: telegramUserId,
+        telegramUserFirstName: telegramUserFirstName,
+      })
       .exec();
 
     if (existingUser) {
-      // User already exists
+      // User already signed up
       return new AuthResponseDto({ alreadySignedUp: true });
     }
 
-    //const telegramUserId = telegramAuthResponseDto.authData.user.id;
-    const createdUser = new this.userModel(
-      new CreateTelegramUserDto(telegramUserId),
-    );
-    createdUser.save();
+    await this.userModel
+      .updateOne(
+        { telegramUserId: telegramUserId },
+        { telegramUserFirstName: telegramUserFirstName },
+      )
+      .exec();
 
-    telegramAuthResponseDto.userDbId = createdUser._id.toString();
+    const signedUpUser = await this.userModel
+      .findOne({ telegramUserId: telegramUserId })
+      .exec();
+
+    if (!signedUpUser) {
+      throw new BadRequestException('User not found');
+    }
+
+    telegramAuthResponseDto.userDbId = signedUpUser._id.toString();
     return telegramAuthResponseDto;
   }
+
+  //
+  //---------------------------------- Log In with Telegram -----------------------------------//
+  //
 
   async logInWithTelegram(rowInitData: string): Promise<AuthResponseDto> {
     const telegramAuthResponseDto =
@@ -137,10 +205,15 @@ export class AuthService {
     }
 
     const telegramUserId = telegramAuthResponseDto.authData.user.id;
+    const telegramUserFirstName =
+      telegramAuthResponseDto.authData.user.first_name;
 
     // Check if the user exists in the database
     const existingUser = await this.userModel
-      .findOne({ telegramUserId: telegramUserId })
+      .findOne({
+        telegramUserId: telegramUserId,
+        telegramUserFirstName: telegramUserFirstName,
+      })
       .exec();
 
     if (!existingUser) {
@@ -153,21 +226,37 @@ export class AuthService {
     return telegramAuthResponseDto;
   }
 
+  //
+  //---------------------------------------- Find All Users ---------------------------------------------//
+  //
+
   async findAllUsers(): Promise<User[]> {
     return this.userModel.find().exec();
   }
 
-  // google auth
-  //-------------------------------------------------------------------------------------//
+  //
+  //---------------------------------------- Sign Up with Google ---------------------------------------------//
+  //
 
-  // creating new google user
-  async signUpWithGoogle(token: string): Promise<AuthResponseDto> {
+  async signUpWithGoogle(
+    rowInitData: string,
+    token: string,
+  ): Promise<AuthResponseDto> {
+    const telegramAuthResponseDto =
+      await this.validateTelegramAuth(rowInitData);
+
+    if (!telegramAuthResponseDto?.authData?.user) {
+      throw new UnauthorizedException('Invalid auth data');
+    }
+
+    const telegramUserId = telegramAuthResponseDto.authData.user.id;
+
     const decodedToken = await this.verifyIdTokenGoogle(token);
     const email = decodedToken.email;
     if (!email) {
       throw new Error('Email not found');
     }
-    // Check if the user exists in the database
+    // Check if the user signed up
     const existingUser = await this.userModel.findOne({ email: email }).exec();
 
     if (existingUser) {
@@ -175,16 +264,30 @@ export class AuthService {
       return new AuthResponseDto({ alreadySignedUp: true });
     }
 
-    const createdUser = new this.userModel(new CreateGoogleUserDto(email));
-    createdUser.save();
+    // update user with telegramUserId
+
+    await this.userModel
+      .updateOne({ telegramUserId: telegramUserId }, { email: email })
+      .exec();
+
+    const signedUpUser = await this.userModel
+      .findOne({ telegramUserId: telegramUserId })
+      .exec();
+
+    if (!signedUpUser) {
+      throw new BadRequestException('User not found');
+    }
 
     return new AuthResponseDto({
-      userDbId: createdUser._id.toString(),
+      userDbId: signedUpUser._id.toString(),
       email: email,
     });
   }
 
-  // log in with google
+  //
+  //---------------------------------------- Log In with Google ---------------------------------------------//
+  //
+
   async logInWithGoogle(token: string): Promise<AuthResponseDto> {
     const decodedToken = await this.verifyIdTokenGoogle(token);
     const email = decodedToken.email;
@@ -206,7 +309,10 @@ export class AuthService {
     });
   }
 
-  // verify google auth token
+  //
+  //---------------------------------------- verify google auth token ---------------------------------------------//
+  //
+
   async verifyIdTokenGoogle(token: string): Promise<admin.auth.DecodedIdToken> {
     try {
       return await this.firebaseAdmin.auth().verifyIdToken(token);
@@ -215,7 +321,10 @@ export class AuthService {
     }
   }
 
-  // check if user is admin
+  //
+  // ---------------------------------------- check if user is admin ---------------------------------------------//
+  //
+
   async adminCheck(userId: string): Promise<AdminCheckResponseDto> {
     const user = await this.userModel.findOne({ _id: userId }).exec();
     if (!user) throw new Error('User not found');

@@ -45,6 +45,6 @@ const firebaseProvider = {
   ],
   controllers: [AuthController],
   providers: [AuthService, AuthGuard, firebaseProvider],
-  exports: [AuthService],
+  exports: [AuthService, firebaseProvider],
 })
 export class AuthModule {}

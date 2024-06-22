@@ -17,7 +17,7 @@ export class AuthController {
     return this.authService.signUpWithTelegram(authData.initData);
   }
 
-  // TOOD remove
+  // TODO remove
   @Get('users')
   async getUsers() {
     return this.authService.findAllUsers();
@@ -29,8 +29,11 @@ export class AuthController {
   }
 
   @Post('google-sign-up')
-  async googleSignUp(@Body('token') token: string) {
-    return this.authService.signUpWithGoogle(token);
+  async googleSignUp(
+    @Body('initData') initData: string,
+    @Body('token') token: string,
+  ) {
+    return this.authService.signUpWithGoogle(initData, token);
   }
 
   @Get('admin-check')

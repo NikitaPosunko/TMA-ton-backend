@@ -7,10 +7,16 @@ export type UserDocument = HydratedDocument<User>;
 @Schema()
 export class User {
   @Prop()
-  email?: string;
+  telegramUserId: number;
 
   @Prop()
-  telegramUserId?: number;
+  chatWithBotId: number;
+
+  @Prop()
+  telegramUserFirstName?: string;
+
+  @Prop()
+  email?: string;
 
   @Prop({ default: false })
   isAdmin?: boolean;
@@ -27,12 +33,12 @@ export class User {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-UserSchema.path('email').validate(function () {
-  // Ensure that either email or telegramUserId is present
-  return this.email || this.telegramUserId;
-}, 'Either email or telegramUserId must be provided.');
+// UserSchema.path('email').validate(function () {
+//   // Ensure that either email or telegramUserId is present
+//   return this.email || this.telegramUserId;
+// }, 'Either email or telegramUserId must be provided.');
 
-UserSchema.path('telegramUserId').validate(function () {
-  // Ensure that either email or telegramUserId is present
-  return this.email || this.telegramUserId;
-}, 'Either email or telegramUserId must be provided.');
+// UserSchema.path('telegramUserId').validate(function () {
+//   // Ensure that either email or telegramUserId is present
+//   return this.email || this.telegramUserId;
+// }, 'Either email or telegramUserId must be provided.');
