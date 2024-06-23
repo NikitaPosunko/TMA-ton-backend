@@ -7,7 +7,7 @@ export class AdminConfigResponseDto {
 }
 
 export class UserWalletConfirmationResponseDto {
-  constructor(public adminWallet: string) {}
+  constructor(public isWalletOwnedBySomeone: boolean) {}
 }
 
 export class UserBalanceDto {

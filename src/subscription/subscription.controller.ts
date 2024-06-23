@@ -65,8 +65,15 @@ export class SubscriptionController {
   ) {
     try {
       // add user wallet to db, assign last transaction date to now
-      this.subscriptionService.userWalletConfirmation(userDbId, wallet);
-      // send back admin wallet
+      return this.subscriptionService.userWalletConfirmation(userDbId, wallet);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  @Get('active-admin-config')
+  async getActiveAdminConfig() {
+    try {
       return this.subscriptionService.getActiveAdminConfig();
     } catch (error) {
       throw error;

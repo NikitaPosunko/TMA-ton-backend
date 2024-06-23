@@ -9,6 +9,7 @@ import {
   SubscriptionResponseDto,
   SubscriptionStatus,
   UserBalanceDto,
+  UserWalletConfirmationResponseDto,
 } from './subscription.dto';
 import { User } from 'src/schemas/user.schema';
 import { Wallet } from 'src/schemas/wallet.schema';
@@ -169,20 +170,6 @@ export class SubscriptionService {
     );
   }
 
-  //
-  //------------------------------ get admin active wallet friendly address ---------------------------------//
-  //
-
-  // async getAdminActiveWalletFriendlyAddress() {
-  //   const adminConfig = await this.adminConfigModel
-  //     .findOne({ active: true })
-  //     .exec();
-  //   if (adminConfig === null) {
-  //     throw new Error('No admin config found');
-  //   }
-  //   return new UserWalletConfirmationResponseDto(adminConfig.adminWallet);
-  // }
-
   // TODO: add error handling
   //------------------- helper function - update last transaction hash, assign wallet to active ----------------------//
   //
@@ -226,12 +213,34 @@ export class SubscriptionService {
     }
   }
 
+  //
+  //--------------------------- check if wallet is already owned by someone ------------------------------//
+  //
+
+  async isWalletOwnedBySomeone(walletFriendlyAddress: string) {
+    const user = await this.userModel
+      .findOne({ 'wallets.walletFriendlyAddress': walletFriendlyAddress })
+      .exec();
+    if (user) return true;
+    return false;
+  }
+
   // TODO: add error handling
   //----- user wallet confirmation -----//
   //
 
   async userWalletConfirmation(userId: string, walletFriendlyAddress: string) {
     const userObjectId = new Types.ObjectId(userId);
+
+    // check if walletFriendlyAddress is owned by someone
+    // if true throw error
+    const walletIsOwnedBySomeone = await this.isWalletOwnedBySomeone(
+      walletFriendlyAddress,
+    );
+
+    if (walletIsOwnedBySomeone) {
+      return new UserWalletConfirmationResponseDto(true);
+    }
 
     // check if user exists
 
@@ -259,6 +268,8 @@ export class SubscriptionService {
       // user doesn't have this wallet in the list
       this.AssignWalletToActive(userId, walletFriendlyAddress, true);
     }
+
+    return new UserWalletConfirmationResponseDto(false);
   }
 
   //
