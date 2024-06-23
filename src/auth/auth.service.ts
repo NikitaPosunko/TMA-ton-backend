@@ -73,7 +73,6 @@ export class AuthService {
   //
 
   async validateTelegramAuth(rowInitData: string): Promise<AuthResponseDto> {
-    console.log(rowInitData);
     // init data parsing
     const urlParams = new URLSearchParams(rowInitData);
     const hash = urlParams.get('hash');

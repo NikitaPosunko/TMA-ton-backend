@@ -15,7 +15,8 @@ import * as moment from 'moment-timezone';
 export class TelegramBotService {
   private bot: Telegraf;
   private BOT_TOKEN = process.env.BOT_TOKEN ?? '';
-  private WEB_APP_URL = 'https://adapted-worm-one.ngrok-free.app';
+  //private WEB_APP_URL = 'https://adapted-worm-one.ngrok-free.app';
+  private WEB_APP_URL = 'https://curious-serval-usable.ngrok-free.app';
   private BOT_USER_NAME = 'MiniAppTgPaymentLoginVideo_bot';
 
   constructor(
