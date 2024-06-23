@@ -217,9 +217,15 @@ export class SubscriptionService {
   //--------------------------- check if wallet is already owned by someone ------------------------------//
   //
 
-  async isWalletOwnedBySomeone(walletFriendlyAddress: string) {
+  async isWalletOwnedBySomeoneElse(
+    userId: string,
+    walletFriendlyAddress: string,
+  ) {
     const user = await this.userModel
-      .findOne({ 'wallets.walletFriendlyAddress': walletFriendlyAddress })
+      .findOne({
+        'wallets.walletFriendlyAddress': walletFriendlyAddress,
+        _id: { $ne: userId },
+      })
       .exec();
     if (user) return true;
     return false;
@@ -234,7 +240,8 @@ export class SubscriptionService {
 
     // check if walletFriendlyAddress is owned by someone
     // if true throw error
-    const walletIsOwnedBySomeone = await this.isWalletOwnedBySomeone(
+    const walletIsOwnedBySomeone = await this.isWalletOwnedBySomeoneElse(
+      userId,
       walletFriendlyAddress,
     );
 
