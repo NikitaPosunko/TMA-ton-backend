@@ -7,7 +7,6 @@ import { AdminGuard } from './admin.guard';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from 'src/schemas/user.schema';
 import { AdminConfig, AdminConfigSchema } from 'src/schemas/adminConfig.schema';
-import { TonConnectService } from 'src/tonConnect/tonConnect.service';
 import { HttpModule } from '@nestjs/axios';
 import {
   SubscriptionPlan,
@@ -18,6 +17,7 @@ import {
   SubscriptionSchema,
 } from 'src/schemas/subscription.schema';
 import { TelegramBotModule } from 'src/telegramBot/bot.module';
+import { DbModule } from 'src/db/db.module';
 
 @Module({
   imports: [
@@ -39,8 +39,9 @@ import { TelegramBotModule } from 'src/telegramBot/bot.module';
     ]),
     HttpModule,
     TelegramBotModule,
+    DbModule,
   ],
-  providers: [SubscriptionService, TonConnectService, AuthGuard, AdminGuard],
+  providers: [SubscriptionService, AuthGuard, AdminGuard],
   controllers: [SubscriptionController],
 })
 export class SubscriptionModule {}

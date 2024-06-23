@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import 'dotenv/config';
-import { AuthService } from 'src/auth/auth.service';
 import { Telegraf, Markup } from 'telegraf';
 import * as moment from 'moment-timezone';
+import { DbService } from 'src/db/db.service';
 
 // // enum with notification types: aboutToExpire, expired
 // enum NotificationType {
@@ -21,7 +21,7 @@ export class TelegramBotService {
 
   constructor(
     private schedulerRegistry: SchedulerRegistry,
-    private readonly authService: AuthService,
+    private readonly dbService: DbService,
   ) {
     this.bot = new Telegraf(this.BOT_TOKEN);
 
@@ -31,7 +31,7 @@ export class TelegramBotService {
 
       // create new user with telegramUserId and botChatId
       // or update botChatId for existing user
-      await this.authService.updateChatWithBotIdForUserOrCreateUser(
+      await this.dbService.updateChatWithBotIdForUserOrCreateUser(
         userId,
         chatId,
       );
@@ -111,5 +111,16 @@ export class TelegramBotService {
     );
 
     this.schedulerRegistry.addTimeout(`notifyHasExpired-${chatId}`, timeout);
+  }
+
+  async sendPhoto(userDbId: string, photo: Buffer) {
+    try {
+      // get chatId from userDbId
+      const chatId = await this.dbService.getChatWithBotId(userDbId);
+      await this.bot.telegram.sendPhoto(chatId, { source: photo });
+    } catch (error) {
+      console.error(`Failed to send photo to user:`, error);
+      throw new Error(`Failed to send photo to user: ${error}`);
+    }
   }
 }

@@ -20,6 +20,7 @@ import { TransactionV3 } from 'src/subscription/types';
 import { SubscriptionPlan } from 'src/schemas/subscriptionPlan.schema';
 import { Subscription } from 'src/schemas/subscription.schema';
 import { TelegramBotService } from 'src/telegramBot/bot.service';
+import { DbService } from 'src/db/db.service';
 
 @Injectable()
 export class SubscriptionService {
@@ -39,7 +40,7 @@ export class SubscriptionService {
 
     private readonly httpService: HttpService,
 
-    //
+    private readonly dbService: DbService,
 
     private readonly telegramBotService: TelegramBotService,
   ) {}
@@ -214,7 +215,7 @@ export class SubscriptionService {
   }
 
   //
-  //--------------------------- check if wallet is already owned by someone ------------------------------//
+  //--------------------------- check if wallet is already owned by someone else ------------------------------//
   //
 
   async isWalletOwnedBySomeoneElse(
@@ -324,15 +325,6 @@ export class SubscriptionService {
         { $set: { 'wallets.$.lastCheckedTransactionDate': date } },
       )
       .exec();
-
-    // const wallet = user.wallets.find(
-    //   (wallet) =>
-    //     wallet.walletFriendlyAddress === connectedWalletFriendlyAddress,
-    // );
-    // if (!wallet) throw new Error('Wallet not found');
-
-    // wallet.lastCheckedTransactionDate = date;
-    // user.save();
   }
 
   //
@@ -585,19 +577,6 @@ export class SubscriptionService {
   }
 
   //
-  //------------------------------------- get ChatWithBotId -------------------------------------//
-  //
-
-  async getChatWithBotId(userDbId: string) {
-    const userDbObjectId = new Types.ObjectId(userDbId);
-    const user = await this.userModel.findById(userDbObjectId).exec();
-    if (!user) {
-      throw new Error('No user found');
-    }
-    return user.chatWithBotId;
-  }
-
-  //
   //------------------------------------- make subscription -------------------------------------//
   //
 
@@ -654,7 +633,7 @@ export class SubscriptionService {
         await this.updateUserBalance(userId, -subscriptionPriceInNanoton);
 
         // get chat with bot id
-        const chatWithBotId = await this.getChatWithBotId(userId);
+        const chatWithBotId = await this.dbService.getChatWithBotId(userId);
 
         // schadule notification for subscription about to expire date
         this.telegramBotService.scheduleMessageSubscriptionIsAboutToExpire(

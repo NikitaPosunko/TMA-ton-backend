@@ -2,10 +2,14 @@ import 'dotenv/config';
 import { Controller, Post, Body, Get, Headers } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { TelegramAuthRequestDto } from './auth.dto';
+import { DbService } from 'src/db/db.service';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly dbService: DbService,
+  ) {}
 
   @Post('telegram-log-in')
   async telegramLogIn(@Body() authData: TelegramAuthRequestDto) {
@@ -20,7 +24,7 @@ export class AuthController {
   // TODO remove
   @Get('users')
   async getUsers() {
-    return this.authService.findAllUsers();
+    return this.dbService.findAllUsers();
   }
 
   @Post('google-log-in')

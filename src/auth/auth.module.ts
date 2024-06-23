@@ -8,6 +8,7 @@ import { User, UserSchema } from 'src/schemas/user.schema';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 import { AuthGuard } from './auth.guard';
+import { DbModule } from 'src/db/db.module';
 
 const firebaseProvider = {
   provide: 'FIREBASE_ADMIN',
@@ -42,6 +43,7 @@ const firebaseProvider = {
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN ?? 5000 },
     }),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    DbModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, AuthGuard, firebaseProvider],

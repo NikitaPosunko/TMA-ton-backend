@@ -11,7 +11,7 @@ import { AuthResponseDto, AdminCheckResponseDto } from './auth.dto';
 import { WebAppInitData } from './types';
 import { User } from 'src/schemas/user.schema';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import * as admin from 'firebase-admin';
 
 @Injectable()
@@ -21,52 +21,6 @@ export class AuthService {
     @InjectModel(User.name) private userModel: Model<User>,
     @Inject('FIREBASE_ADMIN') private readonly firebaseAdmin: admin.app.App,
   ) {}
-
-  //
-  // ---------------------------- Update ChatWithBotId for user or create new user -------------------------------//
-  //
-
-  async updateChatWithBotIdForUserOrCreateUser(
-    telegramUserId: number,
-    chatWithBotId: number,
-  ) {
-    const user = await this.userModel.findOne({
-      telegramUserId: telegramUserId,
-    });
-
-    if (!user) {
-      // if user is not exists create it
-      await this.addUserWithTelegramUserIdAndBotChatIdToDb(
-        telegramUserId,
-        chatWithBotId,
-      );
-    } else {
-      // if user is exists update chatWithBotId
-      await this.userModel.updateOne(
-        { telegramUserId: telegramUserId },
-        { chatWithBotId: chatWithBotId },
-      );
-    }
-  }
-
-  //
-  //------------------------- add new user with telegramUserId and botChatId to db ------------------------//
-  //
-
-  async addUserWithTelegramUserIdAndBotChatIdToDb(
-    telegramUserId: number,
-    chatWithBotId: number,
-  ) {
-    const newUserData: User = {
-      telegramUserId: telegramUserId,
-      chatWithBotId: chatWithBotId,
-      isAdmin: false,
-      nanotonCoinsBalance: new Types.Decimal128('0'),
-      wallets: [],
-    };
-
-    await this.userModel.insertMany(newUserData);
-  }
 
   //
   //---------------------------------- Validate Telegram Auth data -----------------------------------//
@@ -223,14 +177,6 @@ export class AuthService {
     // User exists
     telegramAuthResponseDto.userDbId = existingUser._id.toString();
     return telegramAuthResponseDto;
-  }
-
-  //
-  //---------------------------------------- Find All Users ---------------------------------------------//
-  //
-
-  async findAllUsers(): Promise<User[]> {
-    return this.userModel.find().exec();
   }
 
   //
