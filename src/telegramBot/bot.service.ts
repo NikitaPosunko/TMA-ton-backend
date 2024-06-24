@@ -83,7 +83,21 @@ export class TelegramBotService {
       subscriptionEndDate.getTime() - Date.now() - 60 * 1000,
     );
 
-    this.schedulerRegistry.addTimeout(`notifyAboutToExpire-${chatId}`, timeout);
+    const timeoutName = `notifyAboutToExpire-${chatId}`;
+
+    // Remove existing timeout if it exists
+    if (this.schedulerRegistry.getTimeouts().includes(timeoutName)) {
+      this.schedulerRegistry.deleteTimeout(timeoutName);
+    }
+
+    this.schedulerRegistry.addTimeout(timeoutName, timeout);
+
+    // if (!this.schedulerRegistry.getTimeout(`notifyAboutToExpire-${chatId}`)) {
+    //   this.schedulerRegistry.addTimeout(
+    //     ,
+    //     timeout,
+    //   );
+    // }
   }
 
   //
@@ -109,8 +123,14 @@ export class TelegramBotService {
       sendMessage,
       subscriptionEndDate.getTime() - Date.now(),
     );
+    const timeoutName = `notifyHasExpired-${chatId}`;
 
-    this.schedulerRegistry.addTimeout(`notifyHasExpired-${chatId}`, timeout);
+    // Remove existing timeout if it exists
+    if (this.schedulerRegistry.getTimeouts().includes(timeoutName)) {
+      this.schedulerRegistry.deleteTimeout(timeoutName);
+    }
+
+    this.schedulerRegistry.addTimeout(timeoutName, timeout);
   }
 
   async sendPhoto(userDbId: string, photo: Buffer) {
